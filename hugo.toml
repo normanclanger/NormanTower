@@ -1,0 +1,7 @@
+baseURL = ''
+locale = 'en-us'
+title = 'The Norman Tower'
+theme = 'ananke'
+sectionPagesMenu = 'main'
+recent_posts_number = 0
+
