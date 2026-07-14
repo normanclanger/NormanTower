@@ -1,7 +1,9 @@
-baseURL = ''
+baseURL = 'normantower.uk'
 locale = 'en-us'
 title = 'The Norman Tower'
 theme = 'ananke'
 sectionPagesMenu = 'main'
+[ananke]
+show_recent_posts = false
 recent_posts_number = 0
 
