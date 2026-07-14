@@ -1,4 +1,4 @@
-baseURL = 'normantower.uk'
+baseURL = ''
 locale = 'en-us'
 title = 'The Norman Tower'
 theme = 'ananke'
