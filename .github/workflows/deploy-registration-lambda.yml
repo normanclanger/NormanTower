@@ -1,0 +1,49 @@
+name: Deploy Registration Lambda
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'lambda/**'
+      - 'hugo/data/registration.yaml'
+      - '.github/workflows/deploy-registration-lambda.yml'
+
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Build deployment package
+        run: |
+          mkdir -p package/config
+
+          cp lambda/lambda_function.py package/
+          cp hugo/data/registration.yaml package/config/
+
+          cd package
+          zip -r ../deployment.zip .
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: eu-north-1
+
+      - name: Deploy Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name registration-api \
+            --zip-file fileb://deployment.zip \
+            --region eu-north-1
