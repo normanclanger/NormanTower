@@ -3,6 +3,10 @@ locale = 'en-us'
 title = 'The Norman Tower'
 theme = 'ananke'
 sectionPagesMenu = 'main'
+
+[markup.goldmark.renderer]
+  unsafe = true
+
 [ananke]
 show_recent_posts = false
 recent_posts_number = 0

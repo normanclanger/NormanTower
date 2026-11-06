@@ -1,0 +1,28 @@
+event:
+  name: "12 bell final"
+  date: "2027-06-26"
+  currency: "GBP"
+  advance_purchase_cutoff: "2027-06-01T23:59:00+01:00"
+
+categories:
+  - name: "Pilgrims' Kitchen Breakfast"
+    items:
+      - id: "bacon_roll"
+        name: "Bacon Roll"
+        price: 3.00
+
+      - id: "sausage_bap"
+        name: "Sausage Bap"
+        price: 4.00
+
+  - name: "Cathedral Events"
+    items:
+      - id: "tower_tour"
+        name: "Tower Tour"
+        price: 5.00
+
+  - name: "Beer Tokens"
+    items:
+      - id: "beer_token"
+        name: "Beer Tokens"
+        price: 10.00

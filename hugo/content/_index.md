@@ -8,6 +8,6 @@ show_recent_posts = false
 +++
 # Welcome to the Norman Tower website
 
-[The bells of the Norman Tower](http://www.normantower.uk/bells/)
+[The bells of the Norman Tower](/bells/)
 
-[National 12 Bell Striking Contest](http://www.normantower.uk/bells/)
+[National 12 Bell Striking Contest](/12bell/)

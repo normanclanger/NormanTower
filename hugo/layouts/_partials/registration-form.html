@@ -1,0 +1,171 @@
+
+{{ $config := .Site.Data.registration }}
+{{ $cutoff := time.AsTime $config.event.advance_purchase_cutoff }}
+{{ $preordersOpen := now.Before $cutoff }}
+
+<div class="registration-form measure-wide">
+
+    <form id="registration-form"
+      data-event-name="{{ $config.event.name }}">	
+
+        <!-- Personal details -->
+
+        <fieldset class="ba b--black-20 pa3 mb4">
+            <legend class="f4 fw6 ph2">Personal Details</legend>
+
+            <div class="mb3">
+                <label for="name" class="db fw6 f6 mb2">
+                    Name
+                </label>
+                <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    required
+                    class="w-100 pa2 ba b--black-20 br2">
+            </div>
+
+            <div class="mb3">
+                <label for="email" class="db fw6 f6 mb2">
+                    Email Address
+                </label>
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    required
+                    class="w-100 pa2 ba b--black-20 br2">
+            </div>
+        </fieldset>
+
+        <!-- Participation -->
+
+        <fieldset class="ba b--black-20 pa3 mb4">
+            <legend class="f4 fw6 ph2">Participation</legend>
+
+            <p class="fw6 f6 mb2">Are you a competitor or a visitor?</p>
+
+            <div class="mb3">
+                <label class="mr3">
+                    <input
+                        type="radio"
+                        name="participant_type"
+                        value="competitor"
+                        required>
+                    Competitor
+                </label>
+
+                <label>
+                    <input
+                        type="radio"
+                        name="participant_type"
+                        value="visitor"
+                        required>
+                    Visitor
+                </label>
+            </div>
+
+            <div class="mb2">
+                <label for="home_tower" class="db fw6 f6 mb2">
+                    Home Tower
+                </label>
+                <input
+                    type="text"
+                    id="home_tower"
+                    name="home_tower"
+                    class="w-100 pa2 ba b--black-20 br2">
+            </div>
+        </fieldset>
+
+        <!-- Pre-order information -->
+
+        <h3 class="f3 lh-title">Pre-orders</h3>
+
+        {{ if $preordersOpen }}
+
+            <p class="mb3">
+                You can pre-order the items below until
+                <strong>{{ time.Format "2 January 2006 at 3:04pm" $cutoff }}</strong>.
+                All prices are per item.
+            </p>
+
+        {{ else }}
+
+            <p class="ba b--black-20 bg-light-gray pa3 mb3">
+                <strong>Pre-ordering has now closed.</strong>
+                The advance purchase deadline was
+                {{ time.Format "2 January 2006 at 3:04pm" $cutoff }}.
+            </p>
+
+        {{ end }}
+
+        <!-- Configured categories and items -->
+
+        {{ range $category := $config.categories }}
+
+            <fieldset class="ba b--black-20 pa3 mb4
+                {{ if not $preordersOpen }}o-50{{ end }}">
+
+                <legend class="f4 fw6 ph2">
+                    {{ $category.name }}
+                </legend>
+
+                {{ range $item := $category.items }}
+
+                    <div class="flex flex-wrap items-center justify-between pv2 bb b--black-10">
+
+                        <label
+                            for="quantity-{{ $item.id }}"
+                            class="db fw5 f6 mb2 mb0-ns">
+                            {{ $item.name }}
+                            <span class="fw4 gray">
+                                (£{{ printf "%.2f" $item.price }} each)
+                            </span>
+                        </label>
+
+                        <input
+                            type="number"
+                            id="quantity-{{ $item.id }}"
+                            name="quantities[{{ $item.id }}]"
+							data-item-id="{{ $item.id }}"
+                            data-price="{{ $item.price }}"
+                            value="0"
+                            min="0"
+                            step="1"
+                            {{ if not $preordersOpen }}disabled{{ end }}
+                            class="w3 pa2 ba b--black-20 br2
+                                {{ if not $preordersOpen }}bg-light-gray cursor-not-allowed{{ end }}">
+                    </div>
+
+                {{ end }}
+
+            </fieldset>
+
+        {{ end }}
+
+        <!-- Total -->
+
+        <p id="total" class="f3 fw6 tr mb4">
+            Total: £0.00
+        </p>
+
+        <button
+            type="submit"
+            class="f6 link dim br2 ph3 pv2 mb2 dib white bg-dark-blue bn pointer">
+            Submit Registration
+        </button>
+
+    </form>
+	
+	<div id="registration-result" hidden class="mt4 pa3 ba b--black-20">
+
+        <h3 class="f4">Submission preview</h3>
+
+        <pre id="registration-result-data"
+             class="overflow-auto"></pre>
+    
+    </div>
+
+    <script src="{{ "js/registration.js" | relURL }}" defer></script>
+
+</div>
