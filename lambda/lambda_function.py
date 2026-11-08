@@ -191,7 +191,10 @@ def validate_request(data):
     }
 
 
-def lambda_handler(event, context):
+
+
+
+def lambda_handler2(event, context):
 
     try:
 
@@ -237,4 +240,25 @@ def lambda_handler(event, context):
         return response(500, {
             "status": "error",
             "error": "An unexpected error occurred. Please try again."
+        })
+
+
+
+def lambda_handler(event, context):
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT version()")
+                version = cur.fetchone()[0]
+
+        return response(200, {
+            "status": "connected",
+            "database_version": version
+        })
+
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        return response(500, {
+            "error": "Database connection failed"
         })
