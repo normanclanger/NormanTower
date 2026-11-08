@@ -5,6 +5,9 @@ import base64
 from pathlib import Path
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+import secrets
+
+TICKET_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 
 # Load the registration configuration.
@@ -25,6 +28,7 @@ def get_connection():
     
     
     
+
 def save_registration(registration):
 
     total_pence = registration["total_pence"]
@@ -78,24 +82,28 @@ def save_registration(registration):
             # 2. Create the admission ticket
             # -----------------------------------------
 
+            ticket_reference = generate_ticket_reference()
+
             cur.execute(
                 """
                 INSERT INTO tickets (
                     registration_id,
+                    ticket_reference,
                     ticket_type,
                     ticket_status,
                     issued_at
                 )
-                VALUES (%s, 'ADMISSION', 'ISSUED', NOW())
+                VALUES (%s, %s, 'ADMISSION', 'ISSUED', NOW())
                 RETURNING ticket_id
                 """,
-                (registration_id,)
+                (registration_id, ticket_reference)
             )
 
             ticket_id = cur.fetchone()[0]
 
             created_tickets.append({
                 "ticket_id": str(ticket_id),
+                "ticket_reference": ticket_reference,
                 "ticket_type": "ADMISSION"
             })
 
@@ -131,19 +139,23 @@ def save_registration(registration):
                 registration_item_id = cur.fetchone()[0]
 
                 # One voucher for each individual quantity
+
                 for _ in range(item["quantity"]):
+
+                    ticket_reference = generate_ticket_reference()
 
                     cur.execute(
                         """
                         INSERT INTO tickets (
                             registration_id,
                             registration_item_id,
+                            ticket_reference,
                             ticket_type,
                             ticket_status,
                             issued_at
                         )
                         VALUES (
-                            %s, %s, 'ITEM', %s,
+                            %s, %s, %s, 'ITEM', %s,
                             CASE WHEN %s THEN NOW() ELSE NULL END
                         )
                         RETURNING ticket_id
@@ -151,6 +163,7 @@ def save_registration(registration):
                         (
                             registration_id,
                             registration_item_id,
+                            ticket_reference,
                             item_ticket_status,
                             item_ticket_status == "ISSUED"
                         )
@@ -160,6 +173,7 @@ def save_registration(registration):
 
                     created_tickets.append({
                         "ticket_id": str(ticket_id),
+                        "ticket_reference": ticket_reference,
                         "ticket_type": "ITEM",
                         "item_id": item["item_id"]
                     })
@@ -173,6 +187,7 @@ def save_registration(registration):
         "total_pence": total_pence,
         "tickets": created_tickets
     }
+
     
 
 def response(status_code, data):
@@ -218,6 +233,19 @@ def get_catalog():
             }
 
     return catalog
+    
+    
+
+
+
+def generate_ticket_reference():
+
+    code = "".join(
+        secrets.choice(TICKET_ALPHABET)
+        for _ in range(8)
+    )
+
+    return f"NT-{code}"
 
 
 def validate_request(data):
