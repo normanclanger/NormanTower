@@ -1,4 +1,5 @@
-
+import os
+import psycopg
 import json
 import base64
 from pathlib import Path
@@ -13,6 +14,14 @@ CONFIG_PATH = Path(__file__).parent / "config" / "registration.yaml"
 with open(CONFIG_PATH, "r", encoding="utf-8") as file:
     CONFIG = __import__("yaml").safe_load(file)
 
+
+def get_connection():
+    database_url = os.environ.get("DATABASE_URL")
+
+    if not database_url:
+        raise RuntimeError("DATABASE_URL environment variable is not configured")
+
+    return psycopg.connect(database_url)
 
 def response(status_code, data):
     """Create an API Gateway HTTP response."""
