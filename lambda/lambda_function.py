@@ -22,6 +22,158 @@ def get_connection():
         raise RuntimeError("DATABASE_URL environment variable is not configured")
 
     return psycopg.connect(database_url)
+    
+    
+    
+def save_registration(registration):
+
+    total_pence = registration["total_pence"]
+
+    payment_status = (
+        "NOT_REQUIRED" if total_pence == 0 else "PENDING"
+    )
+
+    item_ticket_status = (
+        "ISSUED" if total_pence == 0 else "PENDING_PAYMENT"
+    )
+
+    created_tickets = []
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            # -----------------------------------------
+            # 1. Create the registration
+            # -----------------------------------------
+
+            cur.execute(
+                """
+                INSERT INTO registrations (
+                    event_name,
+                    name,
+                    email,
+                    participant_type,
+                    home_tower,
+                    total_pence,
+                    payment_status
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    registration["event"],
+                    registration["customer"]["name"],
+                    registration["customer"]["email"],
+                    registration["customer"]["participant_type"],
+                    registration["customer"]["home_tower"],
+                    total_pence,
+                    payment_status
+                )
+            )
+
+            registration_id = cur.fetchone()[0]
+
+            # -----------------------------------------
+            # 2. Create the admission ticket
+            # -----------------------------------------
+
+            cur.execute(
+                """
+                INSERT INTO tickets (
+                    registration_id,
+                    ticket_type,
+                    ticket_status,
+                    issued_at
+                )
+                VALUES (%s, 'ADMISSION', 'ISSUED', NOW())
+                RETURNING ticket_id
+                """,
+                (registration_id,)
+            )
+
+            ticket_id = cur.fetchone()[0]
+
+            created_tickets.append({
+                "ticket_id": str(ticket_id),
+                "ticket_type": "ADMISSION"
+            })
+
+            # -----------------------------------------
+            # 3. Create registration items and vouchers
+            # -----------------------------------------
+
+            for item in registration["items"]:
+
+                cur.execute(
+                    """
+                    INSERT INTO registration_items (
+                        registration_id,
+                        item_id,
+                        item_name,
+                        quantity,
+                        unit_price_pence,
+                        line_total_pence
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        registration_id,
+                        item["item_id"],
+                        item["name"],
+                        item["quantity"],
+                        item["unit_price_pence"],
+                        item["line_total_pence"]
+                    )
+                )
+
+                registration_item_id = cur.fetchone()[0]
+
+                # One voucher for each individual quantity
+                for _ in range(item["quantity"]):
+
+                    cur.execute(
+                        """
+                        INSERT INTO tickets (
+                            registration_id,
+                            registration_item_id,
+                            ticket_type,
+                            ticket_status,
+                            issued_at
+                        )
+                        VALUES (
+                            %s, %s, 'ITEM', %s,
+                            CASE WHEN %s THEN NOW() ELSE NULL END
+                        )
+                        RETURNING ticket_id
+                        """,
+                        (
+                            registration_id,
+                            registration_item_id,
+                            item_ticket_status,
+                            item_ticket_status == "ISSUED"
+                        )
+                    )
+
+                    ticket_id = cur.fetchone()[0]
+
+                    created_tickets.append({
+                        "ticket_id": str(ticket_id),
+                        "ticket_type": "ITEM",
+                        "item_id": item["item_id"]
+                    })
+
+    # The connection context commits automatically if successful.
+    # If anything fails, it rolls back the transaction.
+
+    return {
+        "registration_id": registration_id,
+        "payment_status": payment_status,
+        "total_pence": total_pence,
+        "tickets": created_tickets
+    }
+    
 
 def response(status_code, data):
     """Create an API Gateway HTTP response."""
@@ -194,7 +346,7 @@ def validate_request(data):
 
 
 
-def lambda_handler2(event, context):
+def lambda_handler(event, context):
 
     try:
 
@@ -215,10 +367,13 @@ def lambda_handler2(event, context):
 
         registration = validate_request(data)
 
+        saved = save_registration(registration)
+
         return response(200, {
-            "status": "validated",
-            "message": "Registration details validated successfully.",
-            "registration": registration
+            "status": "registered",
+            "message": "Registration saved successfully.",
+            "registration": registration,
+            "database": saved
         })
 
     except (ValueError, json.JSONDecodeError, InvalidOperation) as error:
@@ -243,22 +398,3 @@ def lambda_handler2(event, context):
         })
 
 
-
-def lambda_handler(event, context):
-
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT version()")
-                version = cur.fetchone()[0]
-
-        return response(200, {
-            "status": "connected",
-            "database_version": version
-        })
-
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        return response(500, {
-            "error": "Database connection failed"
-        })
