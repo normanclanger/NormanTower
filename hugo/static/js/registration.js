@@ -143,8 +143,37 @@ document.addEventListener("DOMContentLoaded", () => {
                 );
             }
 
-            resultDataElement.textContent =
-                JSON.stringify(data, null, 2);
+            // Paid registration - redirect to SumUp.
+
+            if (data.status === "awaiting_payment") {
+
+                if (!data.payment?.checkout_url) {
+                    throw new Error(
+                        "The payment checkout URL was not returned."
+                    );
+                }
+
+                resultDataElement.textContent =
+                    "Registration saved. Redirecting to secure payment...";
+
+                window.location.href = data.payment.checkout_url;
+
+                return;
+            }
+
+            // Free registration - show confirmation.
+
+            if (data.status === "registered") {
+
+                resultDataElement.textContent =
+                    "Your registration has been received successfully.";
+
+                return;
+            }
+
+            throw new Error(
+                data.message || "Unexpected response from the registration service."
+            );
 
         } catch (error) {
 
