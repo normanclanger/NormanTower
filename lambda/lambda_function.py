@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import secrets
-from sumup_client import create_checkout, SumUpError
+from sumup_client import create_checkout, SumUpError, get_webhook_url
 
 TICKET_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
@@ -377,7 +377,8 @@ def handle_test_checkout():
     try:
         result = create_checkout(
             amount=1.00,
-            description="AWS Lambda sandbox test"
+            description="AWS Lambda sandbox test",
+            return_url=get_webhook_url()
         )
 
         return response(200, {
