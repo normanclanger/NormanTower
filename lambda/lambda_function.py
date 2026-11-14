@@ -6,7 +6,12 @@ from pathlib import Path
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import secrets
-from sumup_client import create_checkout, SumUpError, get_webhook_url
+from sumup_client import (
+    create_checkout,
+    get_checkout,
+    get_webhook_url,
+    SumUpError
+)
 
 TICKET_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
@@ -399,6 +404,105 @@ def handle_test_checkout():
         })
 
 
+def handle_sumup_webhook(event):
+
+    # Check the secret token in the URL.
+    path = event.get("rawPath", "")
+    token = path.rsplit("/", 1)[-1]
+
+    expected_token = os.getenv("SUMUP_WEBHOOK_TOKEN")
+
+    if not expected_token or not secrets.compare_digest(
+        token, expected_token
+    ):
+        print("Rejected webhook: invalid token")
+        return response(404, {
+            "status": "error",
+            "error": "Not found"
+        })
+
+    # Read the notification body.
+    body = event.get("body")
+
+    if not body:
+        print("Invalid webhook payload: empty body")
+        return response(400, {
+            "status": "error",
+            "error": "Invalid webhook payload"
+        })
+
+    try:
+        if event.get("isBase64Encoded"):
+            body = base64.b64decode(body).decode("utf-8")
+
+        data = json.loads(body)
+
+    except (ValueError, UnicodeDecodeError):
+        print("Invalid webhook payload: unable to decode JSON")
+        return response(400, {
+            "status": "error",
+            "error": "Invalid webhook payload"
+        })
+
+    if not isinstance(data, dict):
+        print("Invalid webhook payload")
+        return response(400, {
+            "status": "error",
+            "error": "Invalid webhook payload"
+        })
+
+    event_type = data.get("event_type")
+    checkout_id = data.get("id")
+
+    print("\nWebhook received")
+    print("----------------")
+    print(f"Event type:  {event_type}")
+    print(f"Checkout ID: {checkout_id}")
+
+    if event_type != "CHECKOUT_STATUS_CHANGED":
+        print("Ignoring unknown event type")
+        return response(200, {"status": "ignored"})
+
+    if not checkout_id:
+        print("Missing checkout ID")
+        return response(400, {
+            "status": "error",
+            "error": "Missing checkout ID"
+        })
+
+    try:
+        checkout = get_checkout(checkout_id)
+
+        status = checkout.get("status")
+
+        print("\nVerified checkout with SumUp")
+        print("----------------------------")
+        print(f"Status:      {status}")
+        print(f"Reference:   {checkout.get('checkout_reference')}")
+        print(f"Amount:      {checkout.get('amount')}")
+        print(f"Currency:    {checkout.get('currency')}")
+        print(f"Transaction: {checkout.get('transaction_code')}")
+
+        if status == "PAID":
+            print("\n*** PAYMENT CONFIRMED ***")
+        elif status == "FAILED":
+            print("\n*** PAYMENT FAILED ***")
+        else:
+            print(f"\nCheckout is currently {status}")
+
+        return response(200, {
+            "status": "verified",
+            "checkout_id": checkout_id,
+            "checkout_status": status
+        })
+
+    except SumUpError as error:
+        print(f"Unable to verify checkout: {error}")
+
+        return response(500, {
+            "status": "error",
+            "error": "Unable to verify checkout"
+        })
 
 
 
@@ -421,6 +525,15 @@ def lambda_handler(event, context):
         ):
             return handle_test_checkout()
             
+        # SumUp webhook route.
+
+        if (
+            event.get("rawPath", "").startswith("/sumup/webhook/")
+            and event.get("requestContext", {})
+                .get("http", {})
+                .get("method") == "POST"
+        ):
+            return handle_sumup_webhook(event)
 
         # API Gateway sends the submitted JSON in event["body"].
 
