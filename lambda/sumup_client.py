@@ -63,6 +63,7 @@ def create_checkout(
     checkout_reference=None,
     currency="GBP",
     return_url=None,
+    redirect_url=None,
 ):
 
     _, merchant_code = get_credentials()
