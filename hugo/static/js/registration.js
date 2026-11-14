@@ -7,8 +7,13 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
     }
 
+    const API_URL =
+        "https://wy4fap3sc9.execute-api.eu-north-1.amazonaws.com/api/registration/submit";
+
     const totalElement = document.getElementById("total");
     const resultElement = document.getElementById("registration-result");
+    const resultDataElement = document.getElementById("registration-result-data");
+    const submitButton = form.querySelector('button[type="submit"]');
 
     const quantityInputs = form.querySelectorAll(
         'input[name^="quantities["]'
@@ -60,9 +65,9 @@ document.addEventListener("DOMContentLoaded", () => {
         input.addEventListener("input", updateTotal);
     });
 
-    // Prepare a submission preview.
+    // Submit the registration to the API.
 
-    form.addEventListener("submit", event => {
+    form.addEventListener("submit", async event => {
 
         event.preventDefault();
 
@@ -109,15 +114,51 @@ document.addEventListener("DOMContentLoaded", () => {
 
         };
 
-        document.getElementById("registration-result-data").textContent =
-            JSON.stringify(submission, null, 2);
+        // Show progress and prevent duplicate submissions.
 
+        submitButton.disabled = true;
         resultElement.hidden = false;
+        resultDataElement.textContent = "Submitting your registration...";
 
         resultElement.scrollIntoView({
             behavior: "smooth",
             block: "nearest"
         });
+
+        try {
+
+            const response = await fetch(API_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(submission)
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.error || "Unable to submit your registration."
+                );
+            }
+
+            resultDataElement.textContent =
+                JSON.stringify(data, null, 2);
+
+        } catch (error) {
+
+            console.error("Registration submission failed:", error);
+
+            resultDataElement.textContent =
+                "Sorry, there was a problem submitting your registration.\n\n" +
+                error.message;
+
+        } finally {
+
+            submitButton.disabled = false;
+
+        }
 
     });
 

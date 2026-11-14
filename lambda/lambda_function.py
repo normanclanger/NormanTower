@@ -99,10 +99,18 @@ def save_registration(registration):
                     ticket_status,
                     issued_at
                 )
-                VALUES (%s, %s, 'ADMISSION', 'ISSUED', NOW())
+                VALUES (
+                    %s, %s, 'ADMISSION', %s,
+                    CASE WHEN %s THEN NOW() ELSE NULL END
+                )
                 RETURNING ticket_id
                 """,
-                (registration_id, ticket_reference)
+                (
+                    registration_id,
+                    ticket_reference,
+                    item_ticket_status,
+                    item_ticket_status == "ISSUED"
+                )
             )
 
             ticket_id = cur.fetchone()[0]
@@ -195,6 +203,26 @@ def save_registration(registration):
     }
 
     
+def save_sumup_checkout_id(registration_id, checkout_id):
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                UPDATE registrations
+                SET sumup_checkout_id = %s
+                WHERE id = %s
+                """,
+                (checkout_id, registration_id)
+            )
+
+            if cur.rowcount != 1:
+                raise ValueError(
+                    "Unable to associate SumUp checkout with registration"
+                )
+
 
 def response(status_code, data):
     """Create an API Gateway HTTP response."""
@@ -552,13 +580,62 @@ def lambda_handler(event, context):
 
         registration = validate_request(data)
 
+        # Save the registration and create its tickets.
+
         saved = save_registration(registration)
 
+        # -----------------------------------------
+        # Free registration - no payment required
+        # -----------------------------------------
+
+        if saved["total_pence"] == 0:
+
+            return response(200, {
+                "status": "registered",
+                "message": "Registration saved successfully.",
+                "registration": registration,
+                "database": saved
+            })
+
+        # -----------------------------------------
+        # Paid registration - create SumUp checkout
+        # -----------------------------------------
+
+        amount = saved["total_pence"] / 100
+
+        checkout = create_checkout(
+            amount=amount,
+            description=f"{registration['event']} registration",
+            checkout_reference=f"registration-{saved['registration_id']}",
+            return_url=get_webhook_url()
+        )
+
+        checkout_id = checkout.get("id")
+        checkout_url = checkout.get("hosted_checkout_url")
+
+        if not checkout_id or not checkout_url:
+            raise RuntimeError(
+                "SumUp did not return a checkout ID and URL"
+            )
+
+        # Associate the checkout with the registration.
+
+        save_sumup_checkout_id(
+            saved["registration_id"],
+            checkout_id
+        )
+
         return response(200, {
-            "status": "registered",
-            "message": "Registration saved successfully.",
+            "status": "awaiting_payment",
+            "message": "Registration saved. Payment is required.",
             "registration": registration,
-            "database": saved
+            "database": saved,
+            "payment": {
+                "checkout_id": checkout_id,
+                "checkout_url": checkout_url,
+                "amount": amount,
+                "currency": "GBP"
+            }
         })
 
     except (ValueError, json.JSONDecodeError, InvalidOperation) as error:
