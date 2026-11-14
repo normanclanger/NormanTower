@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import secrets
+from sumup_client import create_checkout, SumUpError
 
 TICKET_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
@@ -371,12 +372,54 @@ def validate_request(data):
     }
 
 
+def handle_test_checkout():
+
+    try:
+        result = create_checkout(
+            amount=1.00,
+            description="AWS Lambda sandbox test"
+        )
+
+        return response(200, {
+            "status": "success",
+            "checkout_id": result.get("id"),
+            "checkout_reference": result.get("checkout_reference"),
+            "checkout_url": result.get("hosted_checkout_url"),
+            "checkout_status": result.get("status")
+        })
+
+    except SumUpError as error:
+
+        print(f"SumUp checkout error: {error}")
+
+        return response(500, {
+            "status": "error",
+            "error": "Unable to create SumUp checkout."
+        })
+
+
+
+
+
 
 
 
 def lambda_handler(event, context):
 
     try:
+    
+    
+    
+        # Temporary SumUp sandbox test route.
+
+        if (
+            event.get("rawPath") == "/test-checkout"
+            and event.get("requestContext", {})
+                .get("http", {})
+                .get("method") == "POST"
+        ):
+            return handle_test_checkout()
+            
 
         # API Gateway sends the submitted JSON in event["body"].
 
