@@ -85,7 +85,7 @@ def create_checkout(
       payload["return_url"] = return_url
       
     if redirect_url:
-    payload["redirect_url"] = redirect_url
+      payload["redirect_url"] = redirect_url
 
     return api_request(
         "POST",
