@@ -99,12 +99,13 @@ def get_checkout(checkout_id):
     )
 
 def get_webhook_url():
+
     token = os.getenv("SUMUP_WEBHOOK_TOKEN")
 
     if not token:
         raise SumUpError("Missing SUMUP_WEBHOOK_TOKEN")
 
     return (
-        "https://normanclanger.hopto.org/"
-        f"sumup/webhook/{token}"
+        "https://wy4fap3sc9.execute-api.eu-north-1.amazonaws.com"
+        f"/sumup/webhook/{token}"
     )
