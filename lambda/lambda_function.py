@@ -646,7 +646,43 @@ def handle_sumup_webhook(event):
             "error": "Unable to verify checkout"
         })
 
+# Return the fulfilment status
 
+def handle_fulfilment_status(event):
+
+    params = event.get("queryStringParameters") or {}
+    token = params.get("token")
+
+    if not token:
+        return response(400, {
+            "status": "error",
+            "error": "Confirmation token is required."
+        })
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT fulfilment_status
+                FROM registrations
+                WHERE confirmation_token = %s
+                """,
+                (token,)
+            )
+
+            row = cur.fetchone()
+
+    if not row:
+        return response(404, {
+            "status": "error",
+            "error": "Registration not found."
+        })
+
+    return response(200, {
+        "status": row[0]
+    })
 
 
 
@@ -655,17 +691,6 @@ def lambda_handler(event, context):
 
     try:
     
-    
-    
-        # Temporary SumUp sandbox test route.
-
-        if (
-            event.get("rawPath") == "/test-checkout"
-            and event.get("requestContext", {})
-                .get("http", {})
-                .get("method") == "POST"
-        ):
-            return handle_test_checkout()
             
         # SumUp webhook route.
 
@@ -676,7 +701,22 @@ def lambda_handler(event, context):
                 .get("method") == "POST"
         ):
             return handle_sumup_webhook(event)
+            
+        # Start ticket fulfilment
+        if (
+            path == "/api/registration/fulfil"
+            and method == "POST"
+        ):
+            return handle_start_fulfilment(event)
 
+        # Check ticket fulfilment status
+        if (
+            path == "/api/registration/fulfilment-status"
+            and method == "GET"
+        ):
+            return handle_fulfilment_status(event)
+
+        # Registration submission below
         # API Gateway sends the submitted JSON in event["body"].
 
         body = event.get("body")
@@ -778,5 +818,8 @@ def lambda_handler(event, context):
             "status": "error",
             "error": "An unexpected error occurred. Please try again."
         })
+
+
+
 
 
