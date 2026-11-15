@@ -405,7 +405,7 @@ def validate_request(data):
         "event": CONFIG["event"]["name"],
         "customer": {
             "first_name": first_name.strip(),
-            "surname": surname.strip()
+            "surname": surname.strip(),
             "email": email,
             "participant_type": participant_type,
             "home_tower": home_tower.strip()
