@@ -165,8 +165,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (data.status === "registered") {
 
-                resultDataElement.textContent =
-                    "Your registration has been received successfully.";
+                if (!data.confirmation_token) {
+                    throw new Error(
+                        "The registration confirmation token was not returned."
+                    );
+                }
+
+                window.location.href =
+                    `/payment-success/?token=${encodeURIComponent(data.confirmation_token)}`;
 
                 return;
             }
