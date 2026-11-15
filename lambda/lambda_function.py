@@ -707,6 +707,7 @@ def lambda_handler(event, context):
             return response(200, {
                 "status": "registered",
                 "message": "Registration saved successfully.",
+                "confirmation_token": saved["confirmation_token"],
                 "registration": registration,
                 "database": saved
             })
