@@ -691,6 +691,11 @@ def lambda_handler(event, context):
 
     try:
     
+        path = event.get("rawPath", "")
+
+        method = event.get("requestContext", {}).get(
+            "http", {}
+        ).get("method")
             
         # SumUp webhook route.
 
