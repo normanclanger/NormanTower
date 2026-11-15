@@ -71,7 +71,7 @@ def save_registration(registration):
                     payment_status,
                     confirmation_token
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
