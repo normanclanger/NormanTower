@@ -498,30 +498,140 @@ def handle_sumup_webhook(event):
             "error": "Missing checkout ID"
         })
 
+
     try:
         checkout = get_checkout(checkout_id)
 
         status = checkout.get("status")
+        checkout_reference = checkout.get("checkout_reference")
+        amount = checkout.get("amount")
+        currency = checkout.get("currency")
 
         print("\nVerified checkout with SumUp")
         print("----------------------------")
         print(f"Status:      {status}")
-        print(f"Reference:   {checkout.get('checkout_reference')}")
-        print(f"Amount:      {checkout.get('amount')}")
-        print(f"Currency:    {checkout.get('currency')}")
+        print(f"Reference:   {checkout_reference}")
+        print(f"Amount:      {amount}")
+        print(f"Currency:    {currency}")
         print(f"Transaction: {checkout.get('transaction_code')}")
 
-        if status == "PAID":
-            print("\n*** PAYMENT CONFIRMED ***")
-        elif status == "FAILED":
-            print("\n*** PAYMENT FAILED ***")
-        else:
-            print(f"\nCheckout is currently {status}")
+        # Only process successful payments.
+        if status != "PAID":
+            print(f"\nPayment not yet confirmed: {status}")
+            return response(200, {
+                "status": "not_paid",
+                "checkout_id": checkout_id,
+                "checkout_status": status
+            })
 
+        print("\n*** PAYMENT CONFIRMED ***")
+
+        # Find the registration and lock it against concurrent webhook calls.
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+
+                cur.execute("""
+                    SELECT id, total_pence, payment_status
+                    FROM registrations
+                    WHERE sumup_checkout_id = %s
+                    FOR UPDATE
+                """, (checkout_id,))
+
+                registration = cur.fetchone()
+
+                if not registration:
+                    print("ERROR: No registration found for checkout")
+                    return response(200, {
+                        "status": "registration_not_found"
+                    })
+
+                registration_id, total_pence, payment_status = registration
+
+                # Check the checkout reference.
+                expected_reference = f"registration-{registration_id}"
+
+                if checkout_reference != expected_reference:
+                    print("ERROR: Checkout reference mismatch")
+                    return response(200, {
+                        "status": "reference_mismatch"
+                    })
+
+                # Check currency and amount.
+                if currency != "GBP":
+                    print(f"ERROR: Unexpected currency: {currency}")
+                    return response(200, {
+                        "status": "currency_mismatch"
+                    })
+
+                try:
+                    paid_amount = Decimal(str(amount))
+                    expected_amount = (
+                        Decimal(total_pence) / Decimal("100")
+                    )
+                except (InvalidOperation, TypeError, ValueError):
+                    print("ERROR: Invalid checkout amount")
+                    return response(200, {
+                        "status": "invalid_amount"
+                    })
+
+                if paid_amount != expected_amount:
+                    print(
+                        f"ERROR: Amount mismatch. "
+                        f"Expected £{expected_amount}, received £{paid_amount}"
+                    )
+                    return response(200, {
+                        "status": "amount_mismatch"
+                    })
+
+                # Make repeated webhook notifications harmless.
+                if payment_status == "PAID":
+                    print(
+                        f"Registration {registration_id} "
+                        "has already been marked PAID"
+                    )
+                    return response(200, {
+                        "status": "already_processed",
+                        "registration_id": registration_id
+                    })
+
+                if payment_status != "PENDING":
+                    print(
+                        f"ERROR: Unexpected registration payment status: "
+                        f"{payment_status}"
+                    )
+                    return response(200, {
+                        "status": "unexpected_payment_status"
+                    })
+
+                # Mark the registration as paid.
+                cur.execute("""
+                    UPDATE registrations
+                    SET payment_status = 'PAID'
+                    WHERE id = %s
+                """, (registration_id,))
+
+                # Issue the tickets that were waiting for payment.
+                cur.execute("""
+                    UPDATE tickets
+                    SET ticket_status = 'ISSUED',
+                        issued_at = NOW()
+                    WHERE registration_id = %s
+                      AND ticket_status = 'PENDING_PAYMENT'
+                """, (registration_id,))
+
+                tickets_issued = cur.rowcount
+
+                print("\nDatabase updated successfully")
+                print("-----------------------------")
+                print(f"Registration: {registration_id}")
+                print("Payment status: PAID")
+                print(f"Tickets issued: {tickets_issued}")
+
+        # The transaction has committed successfully at this point.
         return response(200, {
-            "status": "verified",
-            "checkout_id": checkout_id,
-            "checkout_status": status
+            "status": "processed",
+            "registration_id": registration_id,
+            "tickets_issued": tickets_issued
         })
 
     except SumUpError as error:
