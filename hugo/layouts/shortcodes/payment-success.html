@@ -1,0 +1,32 @@
+<div class="mw7 center pa3">
+    <h1 class="f2">Registration confirmation</h1>
+
+    <div id="payment-status" class="mt4 pa3 ba b--black-20 br3">
+        <h2 id="payment-status-heading" class="f3 mt0">
+            Checking your registration...
+        </h2>
+
+        <p id="payment-status-message" class="mb0" role="status" aria-live="polite">
+            Please wait while we retrieve your confirmation.
+        </p>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+
+    const heading = document.getElementById("payment-status-heading");
+    const message = document.getElementById("payment-status-message");
+
+    if (token) {
+        heading.textContent = "Token received";
+        message.textContent = "Confirmation token: " + token;
+        console.log("Payment confirmation token:", token);
+    } else {
+        heading.textContent = "No token found";
+        message.textContent = "The confirmation token was missing from the URL.";
+    }
+});
+</script>
