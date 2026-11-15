@@ -104,7 +104,8 @@ document.addEventListener("DOMContentLoaded", () => {
             event: form.dataset.eventName,
 
             customer: {
-                name: form.elements.name.value.trim(),
+                first_name: form.elements.first_name.value.trim(),
+                surname: form.elements.surname.value.trim(),
                 email: form.elements.email.value.trim(),
                 participant_type: participantType.value,
                 home_tower: form.elements.home_tower.value.trim()

@@ -62,7 +62,8 @@ def save_registration(registration):
                 """
                 INSERT INTO registrations (
                     event_name,
-                    name,
+                    first_name,
+                    surname,
                     email,
                     participant_type,
                     home_tower,
@@ -75,7 +76,8 @@ def save_registration(registration):
                 """,
                 (
                     registration["event"],
-                    registration["customer"]["name"],
+                    registration["customer"]["first_name"],
+                    registration["customer"]["surname"],
                     registration["customer"]["email"],
                     registration["customer"]["participant_type"],
                     registration["customer"]["home_tower"],
@@ -297,13 +299,17 @@ def validate_request(data):
     if not isinstance(customer, dict):
         raise ValueError("Customer details are missing.")
 
-    name = customer.get("name")
+    first_name = customer.get("first_name")
+    surname = customer.get("surname")
     email = customer.get("email")
     participant_type = customer.get("participant_type")
     home_tower = customer.get("home_tower", "")
 
-    if not isinstance(name, str) or not name.strip():
-        raise ValueError("Please provide your name.")
+    if not isinstance(first_name, str) or not first_name.strip():
+        raise ValueError("Please provide your first name.")
+
+    if not isinstance(surname, str) or not surname.strip():
+        raise ValueError("Please provide your surname.")
 
     if not isinstance(email, str) or not email.strip():
         raise ValueError("Please provide your email address.")
@@ -398,7 +404,8 @@ def validate_request(data):
     return {
         "event": CONFIG["event"]["name"],
         "customer": {
-            "name": name.strip(),
+            "first_name": first_name.strip(),
+            "surname": surname.strip()
             "email": email,
             "participant_type": participant_type,
             "home_tower": home_tower.strip()

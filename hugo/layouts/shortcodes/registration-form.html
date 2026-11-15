@@ -13,17 +13,31 @@
         <fieldset class="ba b--black-20 pa3 mb4">
             <legend class="f4 fw6 ph2">Personal Details</legend>
 
-            <div class="mb3">
-                <label for="name" class="db fw6 f6 mb2">
-                    Name
-                </label>
-                <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    required
-                    class="w-100 pa2 ba b--black-20 br2">
-            </div>
+        <div class="mb3">
+            <label for="first_name" class="db fw6 f6 mb2">
+                First name
+            </label>
+            <input
+                type="text"
+                id="first_name"
+                name="first_name"
+                autocomplete="given-name"
+                required
+                class="w-100 pa2 ba b--black-20 br2">
+        </div>
+
+        <div class="mb3">
+            <label for="surname" class="db fw6 f6 mb2">
+                Surname
+            </label>
+            <input
+                type="text"
+                id="surname"
+                name="surname"
+                autocomplete="family-name"
+                required
+                class="w-100 pa2 ba b--black-20 br2">
+        </div>
 
             <div class="mb3">
                 <label for="email" class="db fw6 f6 mb2">
