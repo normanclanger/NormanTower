@@ -15,6 +15,7 @@ from sumup_client import (
 
 TICKET_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
+TEST_MODE = os.environ.get("TEST_MODE", "false").lower() == "true"
 
 # Load the registration configuration.
 
@@ -69,9 +70,10 @@ def save_registration(registration):
                     home_tower,
                     total_pence,
                     payment_status,
-                    confirmation_token
+                    confirmation_token,
+                    is_test
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -83,7 +85,8 @@ def save_registration(registration):
                     registration["customer"]["home_tower"],
                     total_pence,
                     payment_status,
-                    confirmation_token
+                    confirmation_token,
+                    TEST_MODE
                 )
             )
 
