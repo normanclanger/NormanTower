@@ -38,6 +38,7 @@ def get_connection():
 def save_registration(registration):
 
     total_pence = registration["total_pence"]
+    confirmation_token = secrets.token_urlsafe(32)
 
     payment_status = (
         "NOT_REQUIRED" if total_pence == 0 else "PENDING"
@@ -66,9 +67,10 @@ def save_registration(registration):
                     participant_type,
                     home_tower,
                     total_pence,
-                    payment_status
+                    payment_status,
+                    confirmation_token
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -78,7 +80,8 @@ def save_registration(registration):
                     registration["customer"]["participant_type"],
                     registration["customer"]["home_tower"],
                     total_pence,
-                    payment_status
+                    payment_status,
+                    confirmation_token
                 )
             )
 
@@ -197,6 +200,7 @@ def save_registration(registration):
 
     return {
         "registration_id": registration_id,
+        "confirmation_token": confirmation_token,
         "payment_status": payment_status,
         "total_pence": total_pence,
         "tickets": created_tickets
@@ -719,6 +723,7 @@ def lambda_handler(event, context):
             checkout_reference=f"registration-{saved['registration_id']}",
             return_url=get_webhook_url(),
             redirect_url="https://www.normantower.uk/payment-success/"
+            f"?token={saved['confirmation_token']}"
         )
 
         print("SumUp checkout response:")
