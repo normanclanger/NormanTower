@@ -802,7 +802,7 @@ def handle_start_fulfilment(event):
             )
 
         payload = {
-            "registration_id": registration_id
+           "confirmation_token": token
         }
 
         lambda_client.invoke(

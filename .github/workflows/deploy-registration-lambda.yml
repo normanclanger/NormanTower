@@ -8,6 +8,7 @@ on:
       - 'lambda/**'
       - 'hugo/data/registration.yaml'
       - '.github/workflows/deploy-registration-lambda.yml'
+      - 'lambda/generate_tickets/**'
 
   workflow_dispatch:
 
@@ -59,4 +60,50 @@ jobs:
           aws lambda update-function-code \
             --function-name registration-api \
             --zip-file fileb://deployment.zip \
+            --region eu-north1
+
+
+  deploy-ticket-generator:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Build deployment package
+        run: |
+          cd lambda/generate_tickets
+
+          rm -rf package
+          mkdir package
+
+          pip install \
+            --platform manylinux2014_x86_64 \
+            --target package \
+            --implementation cp \
+            --python-version 3.13 \
+            --only-binary=:all: \
+            -r requirements.txt
+
+          cp lambda_function.py package/
+          cp generate_ticket.py package/
+          cp 12bellticket.pdf package/
+
+          cd package
+          zip -r ../../../deployment-ticket-generator.zip .
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: eu-north-1
+
+      - name: Deploy Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name norman-tower-ticket-generator \
+            --zip-file fileb://deployment-ticket-generator.zip \
             --region eu-north-1
+

@@ -1,0 +1,4 @@
+psycopg[binary]
+qrcode[pil]
+reportlab
+pypdf
