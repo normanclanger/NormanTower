@@ -1,4 +1,4 @@
-psycopg[binary]
+psycopg[binary]==3.3.4
 qrcode[pil]
 reportlab
 pypdf
