@@ -60,7 +60,7 @@ jobs:
           aws lambda update-function-code \
             --function-name registration-api \
             --zip-file fileb://deployment.zip \
-            --region eu-north1
+            --region eu-north-1
 
 
   deploy-ticket-generator:
