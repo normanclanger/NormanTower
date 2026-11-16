@@ -12,10 +12,18 @@ from sumup_client import (
     get_webhook_url,
     SumUpError
 )
+import boto3
+
 
 TICKET_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 TEST_MODE = os.environ.get("TEST_MODE", "false").lower() == "true"
+
+TICKET_GENERATOR_FUNCTION = os.environ.get(
+    "TICKET_GENERATOR_FUNCTION"
+)
+
+lambda_client = boto3.client("lambda")
 
 # Load the registration configuration.
 
@@ -693,6 +701,148 @@ def handle_fulfilment_status(event):
     return response(200, {
         "status": row[0]
     })
+
+
+
+def handle_start_fulfilment(event):
+
+    # Read the confirmation token from the request body.
+    body = event.get("body")
+
+    if not body:
+        return response(400, {
+            "status": "error",
+            "error": "Request body is required."
+        })
+
+    try:
+        if event.get("isBase64Encoded"):
+            body = base64.b64decode(body).decode("utf-8")
+
+        data = json.loads(body)
+
+    except (ValueError, UnicodeDecodeError):
+        return response(400, {
+            "status": "error",
+            "error": "Invalid request body."
+        })
+
+    if not isinstance(data, dict):
+        return response(400, {
+            "status": "error",
+            "error": "Invalid request body."
+        })
+
+    token = data.get("token")
+
+    if not token:
+        return response(400, {
+            "status": "error",
+            "error": "Confirmation token is required."
+        })
+
+    # Claim fulfilment in a database transaction.
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT id, payment_status, fulfilment_status
+                FROM registrations
+                WHERE confirmation_token = %s
+                FOR UPDATE
+                """,
+                (token,)
+            )
+
+            row = cur.fetchone()
+
+            if not row:
+                return response(404, {
+                    "status": "error",
+                    "error": "Registration not found."
+                })
+
+            registration_id, payment_status, fulfilment_status = row
+
+            # Payment must be complete before fulfilment starts.
+            if payment_status not in ("NOT_REQUIRED", "PAID"):
+                return response(409, {
+                    "status": "error",
+                    "error": "Payment has not been confirmed.",
+                    "payment_status": payment_status
+                })
+
+            # Do not start fulfilment twice.
+            if fulfilment_status != "NOT_STARTED":
+                return response(200, {
+                    "status": fulfilment_status,
+                    "message": "Fulfilment has already been started."
+                })
+
+            # Claim the registration for fulfilment.
+            cur.execute(
+                """
+                UPDATE registrations
+                SET fulfilment_status = 'PROCESSING'
+                WHERE id = %s
+                """,
+                (registration_id,)
+            )
+
+    # The database transaction has committed here.
+
+    # Invoke the ticket-generation Lambda asynchronously.
+    try:
+
+        if not TICKET_GENERATOR_FUNCTION:
+            raise RuntimeError(
+                "TICKET_GENERATOR_FUNCTION is not configured."
+            )
+
+        payload = {
+            "registration_id": registration_id
+        }
+
+        lambda_client.invoke(
+            FunctionName=TICKET_GENERATOR_FUNCTION,
+            InvocationType="Event",
+            Payload=json.dumps(payload).encode("utf-8")
+        )
+
+    except Exception as error:
+
+        print(
+            f"Unable to invoke ticket generator for "
+            f"registration {registration_id}: {error}"
+        )
+
+        with get_connection() as conn:
+
+            with conn.cursor() as cur:
+
+                cur.execute(
+                    """
+                    UPDATE registrations
+                    SET fulfilment_status = 'FAILED'
+                    WHERE id = %s
+                      AND fulfilment_status = 'PROCESSING'
+                    """,
+                    (registration_id,)
+                )
+
+        return response(500, {
+            "status": "error",
+            "error": "Unable to start ticket generation."
+        })
+
+    return response(202, {
+        "status": "PROCESSING",
+        "registration_id": registration_id,
+        "message": "Ticket fulfilment has started."
+    })
+
 
 
 
