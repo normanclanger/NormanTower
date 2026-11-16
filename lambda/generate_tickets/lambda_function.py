@@ -6,6 +6,12 @@ import psycopg
 
 from generate_ticket import generate_tickets
 
+import boto3
+
+s3_client = boto3.client("s3")
+
+TICKETS_BUCKET = os.environ.get("TICKETS_BUCKET")
+
 
 def get_connection():
     database_url = os.environ.get("DATABASE_URL")
@@ -157,6 +163,26 @@ def lambda_handler(event, context):
             tickets,
             is_test=is_test
         )
+        
+        
+        if not TICKETS_BUCKET:
+            raise RuntimeError(
+                "TICKETS_BUCKET environment variable is not configured"
+            )
+
+        s3_key = f"tickets/{confirmation_token}.pdf"
+
+        s3_client.put_object(
+            Bucket=TICKETS_BUCKET,
+            Key=s3_key,
+            Body=pdf_bytes,
+            ContentType="application/pdf"
+        )
+
+        print(
+            f"Uploaded ticket PDF to "
+            f"s3://{TICKETS_BUCKET}/{s3_key}"
+        )
 
         return {
             "statusCode": 200,
@@ -165,7 +191,8 @@ def lambda_handler(event, context):
                 "registration_id": registration_id,
                 "email": email,
                 "ticket_count": len(tickets),
-                "pdf_size": len(pdf_bytes)
+                "pdf_size": len(pdf_bytes),
+                "pdf_uploaded": True
             })
         }
 
