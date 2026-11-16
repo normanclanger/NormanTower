@@ -2,11 +2,11 @@
 import json
 import os
 
+import boto3
 import psycopg
 
 from generate_ticket import generate_tickets
 
-import boto3
 
 s3_client = boto3.client("s3")
 
@@ -24,6 +24,34 @@ def get_connection():
     return psycopg.connect(database_url)
 
 
+def mark_failed(confirmation_token):
+    """Mark an active fulfilment attempt as failed."""
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE registrations
+                    SET
+                        fulfilment_status = 'FAILED',
+                        updated_at = NOW()
+                    WHERE confirmation_token = %s
+                      AND fulfilment_status IN (
+                          'PROCESSING',
+                          'GENERATING_TICKETS',
+                          'FAILED'
+                      )
+                    """,
+                    (confirmation_token,)
+                )
+
+        print("Fulfilment status updated to FAILED")
+
+    except Exception as exc:
+        print(f"Could not update failure status: {exc}")
+
+
 def lambda_handler(event, context):
 
     confirmation_token = event.get("confirmation_token")
@@ -38,32 +66,90 @@ def lambda_handler(event, context):
         }
 
     try:
+        if not TICKETS_BUCKET:
+            raise RuntimeError(
+                "TICKETS_BUCKET environment variable is not configured"
+            )
+
+        # Retrieve and lock the registration.
         with get_connection() as conn:
             with conn.cursor() as cur:
 
-                # Retrieve the registration and its tickets.
                 cur.execute(
                     """
                     SELECT
-                        r.id,
-                        r.first_name,
-                        r.surname,
-                        r.email,
-                        r.is_test,
-                        r.payment_status,
-                        r.fulfilment_status,
+                        id,
+                        first_name,
+                        surname,
+                        email,
+                        is_test,
+                        payment_status,
+                        fulfilment_status
+                    FROM registrations
+                    WHERE confirmation_token = %s
+                    FOR UPDATE
+                    """,
+                    (confirmation_token,)
+                )
+
+                registration = cur.fetchone()
+
+                if not registration:
+                    raise ValueError("Registration not found.")
+
+                (
+                    registration_id,
+                    first_name,
+                    surname,
+                    email,
+                    is_test,
+                    payment_status,
+                    fulfilment_status
+                ) = registration
+
+                if payment_status not in ("NOT_REQUIRED", "PAID"):
+                    raise ValueError(
+                        f"Registration payment status is "
+                        f"{payment_status}."
+                    )
+
+                # Permit a retry after a previous failure.
+                if fulfilment_status not in (
+                    "PROCESSING",
+                    "GENERATING_TICKETS",
+                    "FAILED"
+                ):
+                    raise ValueError(
+                        f"Unexpected fulfilment status: "
+                        f"{fulfilment_status}."
+                    )
+
+                # Record that ticket generation has started.
+                cur.execute(
+                    """
+                    UPDATE registrations
+                    SET
+                        fulfilment_status = 'GENERATING_TICKETS',
+                        updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (registration_id,)
+                )
+
+                # Retrieve the existing tickets.
+                cur.execute(
+                    """
+                    SELECT
                         t.id,
                         t.ticket_reference,
                         t.ticket_type,
                         t.ticket_status,
                         ri.item_name
-                    FROM registrations r
-                    JOIN tickets t
-                        ON t.registration_id = r.id
+                    FROM tickets t
                     LEFT JOIN registration_items ri
                         ON ri.id = t.registration_item_id
                        AND ri.registration_id = t.registration_id
-                    WHERE r.confirmation_token = %s
+                    WHERE t.registration_id = %s
                     ORDER BY
                         CASE
                             WHEN t.ticket_type = 'ADMISSION' THEN 0
@@ -71,49 +157,18 @@ def lambda_handler(event, context):
                         END,
                         t.id
                     """,
-                    (confirmation_token,)
+                    (registration_id,)
                 )
 
                 rows = cur.fetchall()
 
         if not rows:
-            raise ValueError(
-                "Registration or tickets not found."
-            )
-
-        registration_id = rows[0][0]
-        first_name = rows[0][1]
-        surname = rows[0][2]
-        email = rows[0][3]
-        is_test = rows[0][4]
-        payment_status = rows[0][5]
-        fulfilment_status = rows[0][6]
-
-        # Check that the registration is eligible for fulfilment.
-        if payment_status not in ("NOT_REQUIRED", "PAID"):
-            raise ValueError(
-                f"Registration payment status is {payment_status}."
-            )
-
-        if fulfilment_status not in (
-            "PROCESSING",
-            "GENERATING_TICKETS"
-        ):
-            raise ValueError(
-                f"Unexpected fulfilment status: {fulfilment_status}."
-            )
+            raise ValueError("No tickets found for registration.")
 
         tickets = []
 
         for row in rows:
             (
-                _registration_id,
-                _first_name,
-                _surname,
-                _email,
-                _is_test,
-                _payment_status,
-                _fulfilment_status,
                 ticket_db_id,
                 ticket_reference,
                 ticket_type,
@@ -137,8 +192,10 @@ def lambda_handler(event, context):
             elif ticket_type == "ITEM":
                 if not item_name:
                     raise ValueError(
-                        f"Item name missing for ticket {ticket_reference}."
+                        f"Item name missing for ticket "
+                        f"{ticket_reference}."
                     )
+
                 product = item_name
 
             else:
@@ -158,18 +215,16 @@ def lambda_handler(event, context):
             f"for registration {registration_id}"
         )
 
-        # Generate the PDF using the existing ticket generator.
+        # Generate the PDF.
         pdf_bytes = generate_tickets(
             tickets,
             is_test=is_test
         )
-        
-        
-        if not TICKETS_BUCKET:
-            raise RuntimeError(
-                "TICKETS_BUCKET environment variable is not configured"
-            )
 
+        if not pdf_bytes:
+            raise RuntimeError("Ticket generator returned an empty PDF.")
+
+        # Upload the PDF to private S3 storage.
         s3_key = f"tickets/{confirmation_token}.pdf"
 
         s3_client.put_object(
@@ -184,6 +239,9 @@ def lambda_handler(event, context):
             f"s3://{TICKETS_BUCKET}/{s3_key}"
         )
 
+        # Leave status as GENERATING_TICKETS for now.
+        # It will move to SENDING_EMAIL when email sending is implemented.
+
         return {
             "statusCode": 200,
             "body": json.dumps({
@@ -192,10 +250,14 @@ def lambda_handler(event, context):
                 "email": email,
                 "ticket_count": len(tickets),
                 "pdf_size": len(pdf_bytes),
-                "pdf_uploaded": True
+                "pdf_uploaded": True,
+                "fulfilment_status": "GENERATING_TICKETS"
             })
         }
 
     except Exception as exc:
         print(f"Ticket generation failed: {exc}")
+
+        mark_failed(confirmation_token)
+
         raise
