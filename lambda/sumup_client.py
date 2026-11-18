@@ -66,6 +66,12 @@ def create_checkout(
     redirect_url=None,
 ):
 
+    print("========== CREATE_CHECKOUT CALLED ==========")
+    print(f"Checkout reference: {checkout_reference}")
+    print(f"Amount: {amount}")
+    print(f"Description: {description}")
+    print("============================================")
+
     _, merchant_code = get_credentials()
 
     if checkout_reference is None:
