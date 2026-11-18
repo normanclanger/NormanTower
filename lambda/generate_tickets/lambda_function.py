@@ -1,17 +1,32 @@
 
 import json
 import os
-
 import boto3
 import psycopg
+
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
 
 from generate_ticket import generate_tickets
 
 
-s3_client = boto3.client("s3")
+# --------------------------------------------------
+# AWS clients and configuration
+# --------------------------------------------------
+
+s3_client = boto3.client("s3", region_name="eu-north-1")
+ses_client = boto3.client("ses", region_name="eu-north-1")
 
 TICKETS_BUCKET = os.environ.get("TICKETS_BUCKET")
 
+SENDER_EMAIL = "tickets@normantower.uk"
+SENDER_NAME = "Norman Tower Tickets"
+
+
+# --------------------------------------------------
+# Database
+# --------------------------------------------------
 
 def get_connection():
     database_url = os.environ.get("DATABASE_URL")
@@ -22,6 +37,36 @@ def get_connection():
         )
 
     return psycopg.connect(database_url)
+
+
+def update_fulfilment_status(registration_id, new_status, expected_status):
+    """Update fulfilment status, checking the previous status."""
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE registrations
+                SET
+                    fulfilment_status = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+                  AND fulfilment_status = %s
+                """,
+                (
+                    new_status,
+                    registration_id,
+                    expected_status
+                )
+            )
+
+            if cur.rowcount != 1:
+                raise RuntimeError(
+                    f"Could not change fulfilment status from "
+                    f"{expected_status} to {new_status}."
+                )
+
+    print(f"Fulfilment status updated to {new_status}")
 
 
 def mark_failed(confirmation_token):
@@ -40,6 +85,7 @@ def mark_failed(confirmation_token):
                       AND fulfilment_status IN (
                           'PROCESSING',
                           'GENERATING_TICKETS',
+                          'SENDING_EMAIL',
                           'FAILED'
                       )
                     """,
@@ -51,6 +97,75 @@ def mark_failed(confirmation_token):
     except Exception as exc:
         print(f"Could not update failure status: {exc}")
 
+
+# --------------------------------------------------
+# Email
+# --------------------------------------------------
+
+def send_ticket_email(
+    email,
+    first_name,
+    surname,
+    confirmation_token,
+    pdf_bytes
+):
+    """Email the generated ticket PDF using SES."""
+
+    msg = MIMEMultipart()
+
+    msg["Subject"] = "Norman Tower - Your tickets"
+    msg["From"] = f"{SENDER_NAME} <{SENDER_EMAIL}>"
+    msg["To"] = email
+
+    body = MIMEText(
+        f"""Hello {first_name},
+
+Thank you for registering for the 12 bell contest to be held at the Norman Tower on June 26 2027.
+
+Please find your tickets attached to this email.
+
+We look forward to seeing you in June.
+
+The Norman Tower team
+""",
+        "plain",
+        "utf-8"
+    )
+
+    msg.attach(body)
+
+    attachment = MIMEApplication(
+        pdf_bytes,
+        _subtype="pdf"
+    )
+
+    attachment.add_header(
+        "Content-Disposition",
+        "attachment",
+        filename=f"norman-tower-tickets-{confirmation_token}.pdf"
+    )
+
+    msg.attach(attachment)
+
+    result = ses_client.send_raw_email(
+        Source=SENDER_EMAIL,
+        Destinations=[email],
+        RawMessage={
+            "Data": msg.as_bytes()
+        }
+    )
+
+    print(
+        f"Ticket email sent to {email}. "
+        f"SES Message ID: {result['MessageId']}"
+    )
+
+    return result["MessageId"]
+
+
+# --------------------------------------------------
+# Lambda handler
+# --------------------------------------------------
 
 def lambda_handler(event, context):
 
@@ -71,7 +186,10 @@ def lambda_handler(event, context):
                 "TICKETS_BUCKET environment variable is not configured"
             )
 
-        # Retrieve and lock the registration.
+        # --------------------------------------------------
+        # Retrieve and lock the registration
+        # --------------------------------------------------
+
         with get_connection() as conn:
             with conn.cursor() as cur:
 
@@ -111,6 +229,11 @@ def lambda_handler(event, context):
                     raise ValueError(
                         f"Registration payment status is "
                         f"{payment_status}."
+                    )
+
+                if not email:
+                    raise ValueError(
+                        "Registration has no email address."
                     )
 
                 # Permit a retry after a previous failure.
@@ -162,12 +285,17 @@ def lambda_handler(event, context):
 
                 rows = cur.fetchall()
 
+        # --------------------------------------------------
+        # Prepare ticket data
+        # --------------------------------------------------
+
         if not rows:
             raise ValueError("No tickets found for registration.")
 
         tickets = []
 
         for row in rows:
+
             (
                 ticket_db_id,
                 ticket_reference,
@@ -190,6 +318,7 @@ def lambda_handler(event, context):
                 product = "Admission"
 
             elif ticket_type == "ITEM":
+
                 if not item_name:
                     raise ValueError(
                         f"Item name missing for ticket "
@@ -215,16 +344,24 @@ def lambda_handler(event, context):
             f"for registration {registration_id}"
         )
 
-        # Generate the PDF.
+        # --------------------------------------------------
+        # Generate PDF
+        # --------------------------------------------------
+
         pdf_bytes = generate_tickets(
             tickets,
             is_test=is_test
         )
 
         if not pdf_bytes:
-            raise RuntimeError("Ticket generator returned an empty PDF.")
+            raise RuntimeError(
+                "Ticket generator returned an empty PDF."
+            )
 
-        # Upload the PDF to private S3 storage.
+        # --------------------------------------------------
+        # Upload PDF to S3
+        # --------------------------------------------------
+
         s3_key = f"tickets/{confirmation_token}.pdf"
 
         s3_client.put_object(
@@ -239,8 +376,33 @@ def lambda_handler(event, context):
             f"s3://{TICKETS_BUCKET}/{s3_key}"
         )
 
-        # Leave status as GENERATING_TICKETS for now.
-        # It will move to SENDING_EMAIL when email sending is implemented.
+        # --------------------------------------------------
+        # Send email
+        # --------------------------------------------------
+
+        update_fulfilment_status(
+            registration_id,
+            "SENDING_EMAIL",
+            "GENERATING_TICKETS"
+        )
+
+        message_id = send_ticket_email(
+            email=email,
+            first_name=first_name,
+            surname=surname,
+            confirmation_token=confirmation_token,
+            pdf_bytes=pdf_bytes
+        )
+
+        # --------------------------------------------------
+        # Mark complete
+        # --------------------------------------------------
+
+        update_fulfilment_status(
+            registration_id,
+            "COMPLETE",
+            "SENDING_EMAIL"
+        )
 
         return {
             "statusCode": 200,
@@ -251,12 +413,15 @@ def lambda_handler(event, context):
                 "ticket_count": len(tickets),
                 "pdf_size": len(pdf_bytes),
                 "pdf_uploaded": True,
-                "fulfilment_status": "GENERATING_TICKETS"
+                "email_sent": True,
+                "ses_message_id": message_id,
+                "fulfilment_status": "COMPLETE"
             })
         }
 
     except Exception as exc:
-        print(f"Ticket generation failed: {exc}")
+
+        print(f"Ticket fulfilment failed: {exc}")
 
         mark_failed(confirmation_token)
 

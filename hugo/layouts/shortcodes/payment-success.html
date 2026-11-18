@@ -1,32 +1,170 @@
 <div class="mw7 center pa3">
-    <h1 class="f2">Registration confirmation</h1>
+    <h1 class="f2">Processing tickets</h1>
 
-    <div id="payment-status" class="mt4 pa3 ba b--black-20 br3">
-        <h2 id="payment-status-heading" class="f3 mt0">
-            Checking your registration...
+    <div id="payment-status" class="mt4 pa3 ba b--black-20 br3 tc">
+
+        <img
+            id="bell-animation"
+            src="/images/bell_ringing.gif"
+            alt="Bell ringing"
+            class="mw-100"
+            style="max-width: 320px;"
+        >
+
+        <h2 id="payment-status-heading" class="f3 mt3">
+            Look to!
         </h2>
 
-        <p id="payment-status-message" class="mb0" role="status" aria-live="polite">
-            Please wait while we retrieve your confirmation.
+        <p id="payment-status-message"
+           class="mb0"
+           role="status"
+           aria-live="polite">
+            Confirming your registration details...
         </p>
+
+        <div id="ticket-download" class="dn mt4">
+            <p class="f3 b">Stand!</p>
+            <p>
+                That's all — your tickets have been emailed to you.
+                You can also download them here.
+            </p>
+
+            <div id="ticket-download-links"></div>
+        </div>
+
+        <div id="ticket-failure" class="dn mt4">
+            <p class="f3 b">Oh no — fire out!</p>
+            <p>
+                Unfortunately, there was a problem generating or emailing
+                your tickets. Please contact us so that we can resolve this.
+            </p>
+        </div>
+
     </div>
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
+
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
 
     const heading = document.getElementById("payment-status-heading");
     const message = document.getElementById("payment-status-message");
+    const animation = document.getElementById("bell-animation");
+    const download = document.getElementById("ticket-download");
+    const downloadLinks = document.getElementById("ticket-download-links");
+    const failure = document.getElementById("ticket-failure");
+	
+	const API_BASE_URL =
+      "https://wy4fap3sc9.execute-api.eu-north-1.amazonaws.com";
 
-    if (token) {
-        heading.textContent = "Token received";
-        message.textContent = "Confirmation token: " + token;
-        console.log("Payment confirmation token:", token);
-    } else {
-        heading.textContent = "No token found";
-        message.textContent = "The confirmation token was missing from the URL.";
+    const FULFILMENT_URL =
+      API_BASE_URL + "/api/registration/fulfil";
+	const STATUS_URL =
+      API_BASE_URL + "/api/registration/fulfilment-status";
+
+
+
+    function delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function showFailure(text) {
+        heading.textContent = "Oh no — fire out!";
+        message.textContent = text;
+        animation.classList.add("dn");
+        failure.classList.remove("dn");
+    }
+
+    async function getStatus() {
+        const response = await fetch(
+            STATUS_URL + "?token=" + encodeURIComponent(token)
+        );
+
+        if (!response.ok) {
+            throw new Error("Unable to retrieve ticket status.");
+        }
+
+        const data = await response.json();
+        return data.status;
+    }
+
+    if (!token) {
+        showFailure("The confirmation token was missing from the URL.");
+        return;
+    }
+
+    try {
+        // Start ticket generation.
+        const response = await fetch(FULFILMENT_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ token: token })
+        });
+
+        if (!response.ok) {
+            throw new Error("Unable to start ticket generation.");
+        }
+
+        // First message.
+        heading.textContent = "Look to!";
+        message.textContent = "Confirming your registration details...";
+
+        await delay(2000);
+
+        // Second message.
+        heading.textContent = "Go ticket generation major!";
+        message.textContent = "Generating your tickets...";
+
+        await delay(2000);
+
+        // Third message.
+        heading.textContent = "Emailing tickets";
+        message.textContent = "Preparing your tickets for delivery...";
+
+        await delay(2000);
+
+        // Keep checking until fulfilment completes or fails.
+        while (true) {
+            try {
+                const status = await getStatus();
+
+                if (status === "COMPLETE") {
+                    heading.textContent = "That's all!";
+                    message.textContent =
+                        "Your tickets have been emailed to you.";
+
+                    animation.classList.add("dn");
+                    download.classList.remove("dn");
+
+                    // Ticket download links will be added here.
+                    return;
+                }
+
+                if (status === "FAILED") {
+                    showFailure(
+                        "Unfortunately, we couldn't complete your ticket generation."
+                    );
+                    return;
+                }
+
+            } catch (error) {
+                console.error("Ticket status check failed:", error);
+                message.textContent =
+                    "Still trying to check your ticket status...";
+            }
+
+            await delay(3000);
+        }
+
+    } catch (error) {
+        console.error("Ticket fulfilment failed:", error);
+        showFailure(
+            "We couldn't start processing your tickets. Please contact us."
+        );
     }
 });
 </script>
