@@ -921,7 +921,12 @@ def lambda_handler(event, context):
         # Paid registration - create SumUp checkout
         # -----------------------------------------
 
+        print(f"Creating SumUp checkout for registration "
+         f"{saved['registration_id']}")
+
         amount = saved["total_pence"] / 100
+        
+        print(f"Checkout amount: {amount}")
 
         checkout = create_checkout(
             amount=amount,
@@ -937,6 +942,9 @@ def lambda_handler(event, context):
         
         checkout_id = checkout.get("id")
         checkout_url = checkout.get("hosted_checkout_url")
+        
+        print(f"Checkout ID: {checkout_id}")
+        print(f"Checkout URL returned: {bool(checkout_url)}")
 
         if not checkout_id or not checkout_url:
             raise RuntimeError(
@@ -945,11 +953,16 @@ def lambda_handler(event, context):
 
         # Associate the checkout with the registration.
 
+
+        print("Saving SumUp checkout ID")
+        
         save_sumup_checkout_id(
             saved["registration_id"],
             checkout_id
         )
-
+       
+        print("SumUp checkout ID saved successfully")
+        
         return response(200, {
             "status": "awaiting_payment",
             "message": "Registration saved. Payment is required.",
