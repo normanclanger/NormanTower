@@ -26,8 +26,9 @@
             <p class="f3 b">Stand!</p>
             <p>
                 Your tickets have been emailed to you.
-                You can also download them here.
-            </p>
+                You can also download them 
+				<a id="ticket-download-link" href="#">here</a>. 
+		    </p>
 
             <div id="ticket-download-links"></div>
         </div>
@@ -141,6 +142,8 @@ document.addEventListener("DOMContentLoaded", async function () {
                     download.classList.remove("dn");
 
                     // Ticket download links will be added here.
+					document.getElementById("ticket-download-link").href =
+                      `${API_BASE_URL}/api/tickets/download?token=${encodeURIComponent(token)}`;
                     return;
                 }
 
