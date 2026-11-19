@@ -657,6 +657,20 @@ def handle_sumup_webhook(event):
                 print(f"Registration: {registration_id}")
                 print("Payment status: PAID")
                 print(f"Tickets issued: {tickets_issued}")
+                
+        # Start ticket fulfilment.
+        fulfilment_event = {
+          "body": json.dumps({
+            "token": confirmation_token
+          }),
+            "isBase64Encoded": False
+        }
+
+        fulfilment_result = handle_start_fulfilment(
+          fulfilment_event
+        )
+
+        print("Fulfilment started:", fulfilment_result)
 
         # The transaction has committed successfully at this point.
         return response(200, {
