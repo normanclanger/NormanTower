@@ -553,7 +553,7 @@ def handle_sumup_webhook(event):
             with conn.cursor() as cur:
 
                 cur.execute("""
-                    SELECT id, total_pence, payment_status
+                    SELECT id, total_pence, payment_status, confirmation_token
                     FROM registrations
                     WHERE sumup_checkout_id = %s
                     FOR UPDATE
@@ -567,13 +567,15 @@ def handle_sumup_webhook(event):
                         "status": "registration_not_found"
                     })
 
-                registration_id, total_pence, payment_status = registration
+                registration_id, total_pence, payment_status, confirmation_token = registration
 
                 # Check the checkout reference.
-                expected_reference = f"registration-{registration_id}"
+                expected_reference = f"registration-{confirmation_token}"
 
                 if checkout_reference != expected_reference:
                     print("ERROR: Checkout reference mismatch")
+                    print(f"Expected: {expected_reference}")
+                    print(f"Received: {checkout_reference}")
                     return response(200, {
                         "status": "reference_mismatch"
                     })
