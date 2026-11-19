@@ -13,6 +13,10 @@ from sumup_client import (
     SumUpError
 )
 import boto3
+from botocore.exceptions import ClientError
+
+s3_client = boto3.client("s3")
+TICKETS_BUCKET = os.environ.get("TICKETS_BUCKET")
 
 
 TICKET_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -847,6 +851,88 @@ def handle_start_fulfilment(event):
 
 
 
+def handle_ticket_download(event):
+
+    params = event.get("queryStringParameters") or {}
+    token = params.get("token")
+
+    if not token:
+        return response(400, {
+            "status": "error",
+            "error": "Confirmation token is required."
+        })
+
+    if not TICKETS_BUCKET:
+        print("ERROR: TICKETS_BUCKET is not configured")
+        return response(500, {
+            "status": "error",
+            "error": "Ticket download is temporarily unavailable."
+        })
+
+    # Look up the registration and check that ticket fulfilment is complete.
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT fulfilment_status
+                FROM registrations
+                WHERE confirmation_token = %s
+                """,
+                (token,)
+            )
+            row = cur.fetchone()
+
+    if not row:
+        return response(404, {
+            "status": "error",
+            "error": "Registration not found."
+        })
+
+    if row[0] != "COMPLETE":
+        return response(409, {
+            "status": "error",
+            "error": "Your tickets are not yet ready for download."
+        })
+
+    # Retrieve the PDF from the private S3 bucket.
+    s3_key = f"tickets/{token}.pdf"
+
+    try:
+        result = s3_client.get_object(
+            Bucket=TICKETS_BUCKET,
+            Key=s3_key
+        )
+
+        pdf_bytes = result["Body"].read()
+
+    except ClientError as error:
+        error_code = error.response.get("Error", {}).get("Code")
+
+        print(f"S3 download error: {error_code}: {error}")
+
+        if error_code in ("NoSuchKey", "404"):
+            return response(404, {
+                "status": "error",
+                "error": "Ticket PDF could not be found."
+            })
+
+        return response(500, {
+            "status": "error",
+            "error": "Ticket download is temporarily unavailable."
+        })
+
+    # Return the PDF as a downloadable file.
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": 'attachment; filename="Norman-Tower-Tickets.pdf"',
+            "Cache-Control": "private, no-store"
+        },
+        "isBase64Encoded": True,
+        "body": base64.b64encode(pdf_bytes).decode("utf-8")
+    }
+
 
 
 def lambda_handler(event, context):
@@ -882,6 +968,13 @@ def lambda_handler(event, context):
             and method == "GET"
         ):
             return handle_fulfilment_status(event)
+        
+        # Download registration tickets
+        if (
+            path == "/api/tickets/download"
+            and method == "GET"
+        ):
+            return handle_ticket_download(event)
 
         # Registration submission below
         # API Gateway sends the submitted JSON in event["body"].

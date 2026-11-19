@@ -25,7 +25,7 @@
         <div id="ticket-download" class="dn mt4">
             <p class="f3 b">Stand!</p>
             <p>
-                That's all — your tickets have been emailed to you.
+                Your tickets have been emailed to you.
                 You can also download them here.
             </p>
 
@@ -116,7 +116,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         await delay(2000);
 
         // Second message.
-        heading.textContent = "Go ticket generation major!";
+        heading.textContent = "Go ticket generation maximus!";
         message.textContent = "Generating your tickets...";
 
         await delay(2000);
@@ -135,7 +135,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 if (status === "COMPLETE") {
                     heading.textContent = "That's all!";
                     message.textContent =
-                        "Your tickets have been emailed to you.";
+                        "";
 
                     animation.classList.add("dn");
                     download.classList.remove("dn");
