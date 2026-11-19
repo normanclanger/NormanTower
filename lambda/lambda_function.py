@@ -43,7 +43,10 @@ def get_connection():
     if not database_url:
         raise RuntimeError("DATABASE_URL environment variable is not configured")
 
-    return psycopg.connect(database_url)
+    return psycopg.connect(
+        database_url,
+        prepare_threshold=None
+    )
     
     
     
