@@ -1,4 +1,5 @@
 
+from urllib.parse import urlencode
 import os
 import uuid
 import requests
@@ -118,4 +119,16 @@ def get_webhook_url():
     return (
         "https://wy4fap3sc9.execute-api.eu-north-1.amazonaws.com"
         f"/sumup/webhook/{token}"
+    )
+    
+    
+def list_checkouts(checkout_reference):
+
+    query = urlencode({
+        "checkout_reference": checkout_reference
+    })
+
+    return api_request(
+        "GET",
+        f"/checkouts?{query}",
     )

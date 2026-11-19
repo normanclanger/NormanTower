@@ -931,7 +931,7 @@ def lambda_handler(event, context):
         checkout = create_checkout(
             amount=amount,
             description=f"{registration['event']} registration",
-            checkout_reference=f"registration-{saved['registration_id']}",
+            checkout_reference=f"registration-{saved['confirmation_token']}",
             return_url=get_webhook_url(),
             redirect_url="https://www.normantower.uk/payment-success/"
             f"?token={saved['confirmation_token']}"
