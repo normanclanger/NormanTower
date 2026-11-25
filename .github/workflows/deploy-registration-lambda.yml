@@ -150,7 +150,7 @@ jobs:
             --zip-file fileb://deployment-upload-images.zip \
             --region eu-north-1
 
-   deploy-get-people-counts:
+  deploy-get-people-counts:
     runs-on: ubuntu-latest
 
     steps:
