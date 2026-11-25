@@ -1,0 +1,59 @@
+<div class="people-counts">
+    <div class="flex flex-wrap items-center justify-between mb3">
+        <div>
+            <label for="people-count-date" class="db mb2">
+                Select date
+            </label>
+            <input
+                type="date"
+                id="people-count-date"
+                class="pa2 ba b--black-20 br2"
+            >
+        </div>
+
+        <div id="people-count-summary" class="mt3 mt0-ns">
+            Loading results...
+        </div>
+    </div>
+
+    <div id="people-count-error"
+         class="red mb3"
+         role="alert"
+         hidden>
+    </div>
+
+    <div id="people-count-results">
+    </div>
+
+    <div class="tc mt4 mb4">
+        <button
+            id="people-count-more"
+            class="ph4 pv2 br2 bn white bg-dark-blue pointer"
+            hidden>
+            More...
+        </button>
+    </div>
+
+    <!-- Image enlargement -->
+    <div id="people-count-image-modal"
+        class="fixed top-0 left-0 w-100 h-100 items-center justify-center"
+        style="display: none; background: rgba(0,0,0,0.9); z-index: 1000;">
+
+        <button
+            id="people-count-image-close"
+            class="absolute top-1 right-1 pa3 bn white bg-transparent pointer"
+            aria-label="Close image">
+            ✕
+        </button>
+
+        <img
+            id="people-count-enlarged-image"
+            src=""
+            alt=""
+            class="mw-100 mh-100"
+            style="object-fit: contain;"
+        >
+    </div>
+
+    <script src="{{ "js/getPeopleCounts.js" | relURL }}" defer></script>
+</div>
