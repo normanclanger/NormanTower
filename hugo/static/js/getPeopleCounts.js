@@ -76,7 +76,7 @@
             : `<p class="gray">Image unavailable</p>`;
 
         return `
-            <div class="w-100 w-third-l pa2">
+            <div class="w-100 w-50-l pa2">
                 <h3 class="mt2 mb2">${title}</h3>
                 ${details}
                 ${image}
@@ -94,7 +94,7 @@
             </h2>
 
             <div class="flex flex-wrap">
-                <div class="w-100 w-third-l pa2">
+                <div class="w-100 w-50-l pa2">
                   <h3 class="mt2 mb2">Original photograph</h3>
                   <p class="mb3">&nbsp;</p>
                   <img
@@ -105,16 +105,7 @@
               </div>
 
                 ${modelPanel(
-                    "Model A",
-                    record.previous_count,
-                    record.previous_seconds,
-                    record.previous_error,
-                    record.images?.previous,
-                    "Previous model result"
-                )}
-
-                ${modelPanel(
-                    "Model B",
+                    "AI annotated image",
                     record.close_pairs_count,
                     record.close_pairs_seconds,
                     record.close_pairs_error,
